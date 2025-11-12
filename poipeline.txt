@@ -1,0 +1,513 @@
+#1. Create a new Jenkins Pipeline job and configure it to use a Jenkinsfile with the following 
+specifications: 
+use git Repository: https://github.com/hkhcoder/vprofile-project.git 
+branch: main 
+A. Pipeline Configuration: 
+● The pipeline must run on an agent with the label builtinubuntu. 
+● It must specify the use of maven "maven 3.9.10" and jdk "openjdk 21.0.7" 
+from the global tool configurations. 
+B. Stage Implementation (in this specific order): 
+● Stage 1: fetch code 
+This stage should clone the specified Git repository and branch. 
+● Stage 2: unit test 
+This stage should compile the code and run all unit tests using the Maven 
+command: sh 'mvn test'. Stage 3: build the code 
+This stage should package the application into a .war file without running the 
+tests again. Use the command: sh 'mvn package -DskipTests'. 
+● Stage 4: archive the artifact 
+This stage should find and archive the generated .war file. Use the 
+archiveArtifacts step to save **/*.war. 
+● Stage 5: deploy to staging 
+This stage should only run if all previous stages have succeeded. 
+Simulate a deployment by printing a message to the console: echo 
+'Deploying artifact to staging server.'. 
+C. Failure Handling: 
+● Implement a pipeline-level post block that triggers only on failure. 
+● If any stage fails, the pipeline should execute a shell command to print the 
+message: echo 'Build failed. Notifying the development team.'. 
+
+
+pipeline {
+    agent { label 'builtinubuntu' }
+
+   tools {
+    maven 'mvn 3.9.11'
+    jdk 'ORACLEJDK21'
+}
+
+
+    stages {
+        stage('fetch code') {
+            steps {
+                // Update the URL and branch below
+                git branch: 'main', url: 'https://github.com/hkhcoder/vprofile-project.git'
+            }
+        }
+
+        stage('unit test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('build the code') {
+            steps {
+                sh 'mvn package -DskipTests'
+            }
+        }
+
+        stage('archive the artifact') {
+            steps {
+                archiveArtifacts artifacts: '**/*.war'
+            }
+        }
+
+        stage('deploy to staging') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                echo 'Deploying artifact to staging server.'
+            }
+        }
+    }
+
+    post {
+        failure {
+            sh "echo 'Build failed. Notifying the development team.'"
+        }
+    }
+}
+
+
+
+----------------------------------------------------------------
+
+
+#2. Automate the process of building and testing a simple Node.js application using Jenkins 
+Pipeline and Docker.Write a Jenkins Declarative Pipeline that performs the following tasks: 
+use GitHub repository:  https://github.com/ajay-raut/spnodeserver.git 
+branch: main 
+● Uses the agent builtin. 
+● Fetches the application code from the GitHub repository: 
+● Builds a Docker image named my-node-app. 
+● Runs a container from the built image with the name nodeserver on port 5000. 
+● Waits for 10 seconds and then stops and removes the container. 
+● Displays the running containers list before stopping. 
+● On pipeline failure, automatically sends an email notification to the developer at 
+username@gmail.com with build details. 
+
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = 'my-node-app'
+        CONTAINER_NAME = 'nodeserver'
+        GIT_REPO = 'https://github.com/ajay-raut/spnodeserver.git'
+        GIT_BRANCH = 'main'
+        DEV_EMAIL = 'yuvrajsoman25@gmail.com'
+    }
+
+    stages {
+        stage('Fetch Code') {
+            steps {
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh "docker build -t ${IMAGE_NAME} ."
+                }
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                script {
+                    sh "docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}"
+                    sleep 10
+                    sh "docker ps"
+                    sh "docker stop ${CONTAINER_NAME}"
+                    sh "docker rm ${CONTAINER_NAME}"
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            emailext (
+                subject: "Jenkins Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """Build failed for job: ${env.JOB_NAME}
+                         Build number: ${env.BUILD_NUMBER}
+                         Check console output at: ${env.BUILD_URL}""",
+                to: "${DEV_EMAIL}"
+            )
+        }
+    }
+}
+
+
+
+----------------------------------------------------------
+
+
+#3. securely run a PostgreSQL container inside a Jenkins Declarative Pipeline. 
+Write a Jenkins Pipeline with the following requirements: 
+● Use the agent builtin. 
+● In the pipeline, run a Docker container named some-postgres using the official 
+postgres image.
+● The container should be started with an environment variable 
+POSTGRES_PASSWORD, but the password must not be hardcoded in the pipeline. 
+Instead: 
+○ Store the password in Jenkins credentials with ID postgres-password. 
+○ Use withCredentials to securely inject the password into the pipeline. 
+● Ensure the container runs in detached mode (-d). 
+
+
+pipeline {
+    agent any
+
+    environment {
+        GIT_REPO = 'https://github.com/ajay-raut/spnodeserver.git'
+        GIT_BRANCH = 'main'
+        DOCKERHUB_CREDENTIALS = 'dockerhub-creds'   // Jenkins credential ID for Docker Hub
+        DOCKER_IMAGE = 'yuvi25/node-app'            // Your Docker Hub repo
+        CONTAINER_NAME = 'my-node-app-container'
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKERHUB_CREDENTIALS}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${DOCKER_IMAGE} ."
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                sh "docker push ${DOCKER_IMAGE}"
+            }
+        }
+
+        stage('Run Container (optional)') {
+            steps {
+                sh """
+                    docker rm -f ${CONTAINER_NAME} || true
+                    docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${DOCKER_IMAGE}
+                    sleep 10
+                    docker ps
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning up...'
+            sh 'docker stop my-node-app-container || true'
+            sh 'docker rm my-node-app-container || true'
+            sh 'docker logout || true'
+        }
+        failure {
+            echo 'Pipeline failed. Consider setting up email notifications.'
+        }
+    }
+}
+
+------------------------------------------------------------------
+
+
+#4. set up a Jenkins Declarative Pipeline to build and test a Maven-based Java web 
+application.Create a Jenkins pipeline that performs the following tasks: 
+use GitHub repository: https://github.com/hkhcoder/vprofile-project.git 
+branch: main 
+Use the agent whis is aws ec2 cloud agent. 
+● Configure tools: 
+○ Maven version 3.9.10. 
+○ JDK version openjdk 21.0.7. 
+● Fetch the source code from the GitHub repository: 
+https://github.com/hkhcoder/vprofile-project.git (branch: main). 
+● Build the project using Maven with the command: 
+● Create a directory named versions (if it does not exist). 
+● Copy the generated WAR file (target/vprofile-v2.war) into the versions directory 
+with a filename format: 
+● Run unit tests using Maven.
+
+
+
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven-3.9.10'        // Jenkins tool name for Maven
+        jdk 'ORACLEJDK21'           // Jenkins tool name for Oracle JDK 21 (already installed)
+    }
+
+    environment {
+        VERSIONS_DIR = 'versions'
+        WAR_SOURCE = 'target/vprofile-v2.war'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/hkhcoder/vprofile-project.git'
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Create Versions Directory') {
+            steps {
+                script {
+                    if (!fileExists(env.VERSIONS_DIR)) {
+                        sh "mkdir ${env.VERSIONS_DIR}"
+                    }
+                }
+            }
+        }
+
+        stage('Copy WAR File') {
+            steps {
+                script {
+                    def timestamp = new Date().format("yyyyMMdd-HHmmss")
+                    def warDest = "${env.VERSIONS_DIR}/vprofile-v2-${timestamp}.war"
+                    sh "cp ${env.WAR_SOURCE} ${warDest}"
+                    echo "WAR copied to ${warDest}"
+                }
+            }
+        }
+
+        stage('Run Unit Tests') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed. Check logs for details.'
+        }
+    }
+}
+
+---------------------------------------
+
+
+
+
+#1. implement a Jenkins Declarative Pipeline that integrates Maven build, unit testing, and 
+Slack notifications. 
+use GitHub repository: https://github.com/hkhcoder/vprofile-project.git 
+branch: main 
+Create a Jenkins Pipeline with the following requirements: 
+● Use the agent labeled builtinubuntu. 
+● Configure tools: 
+○ Maven version 3.9.10 
+○ JDK version openjdk 21.0.7 
+● Stages:○ Fetch code: Clone the repository 
+https://github.com/hkhcoder/vprofile-project.git (branch: main). 
+○ Build the code: 
+■ Run mvn clean package -DskipTests. 
+■ Create a folder named versions (if it doesn’t exist). 
+■ Copy the generated vprofile-v2.war file into the versions directory 
+with the format: 
+■ Unit test: Execute unit tests with mvn test. 
+Configure a Slack notification in the post section that: 
+● Sends a message to the channel #jenkinsserver. 
+● Uses a color code based on build result (SUCCESS = green, FAILURE = red, 
+UNSTABLE = yellow). 
+● Sends a message in the format: 
+
+
+
+
+pipeline {
+    agent { label 'builtinubuntu' }
+
+    tools {
+        maven 'Maven-3.9.10'
+        jdk 'ORACLEJDK21'
+    }
+
+    environment {
+        REPO_URL = 'https://github.com/hkhcoder/vprofile-project.git'
+        BRANCH = 'main'
+        VERSIONS_DIR = 'versions'
+        WAR_SOURCE = 'target/vprofile-v2.war'
+        SLACK_CHANNEL = '#jenkinsserver'
+    }
+
+    stages {
+        stage('Fetch Code') {
+            steps {
+                git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
+            }
+        }
+
+        stage('Build Code') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+
+                script {
+                    if (!fileExists(env.VERSIONS_DIR)) {
+                        sh "mkdir ${env.VERSIONS_DIR}"
+                    }
+
+                    def timestamp = new Date().format("yyyyMMdd-HHmmss")
+                    def warDest = "${env.VERSIONS_DIR}/vprofile-v2-${timestamp}.war"
+                    sh "cp ${env.WAR_SOURCE} ${warDest}"
+                    echo "WAR copied to ${warDest}"
+                }
+            }
+        }
+
+        stage('Run Unit Tests') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                def colorCode = ''
+                def buildStatus = currentBuild.currentResult
+
+                if (buildStatus == 'SUCCESS') {
+                    colorCode = '#36a64f' // green
+                } else if (buildStatus == 'FAILURE') {
+                    colorCode = '#FF0000' // red
+                } else {
+                    colorCode = '#FFFF00' // yellow
+                }
+
+                slackSend(
+                    channel: "${env.SLACK_CHANNEL}",
+                    color: colorCode,
+                    message: "*Build Result:* ${buildStatus} \n*Job:* ${env.JOB_NAME} \n*Build:* #${env.BUILD_NUMBER} \n*URL:* ${env.BUILD_URL}"
+                )
+            }
+        }
+    }
+}
+
+-------------------------------------------------------
+stbq2
+
+
+
+#2. Create a Jenkins Declarative Pipeline to automate building and pushing a Docker image to 
+Docker Hub. 
+use GitHub repository: https://github.com/ajay-raut/spnodeserver.git 
+branch: main 
+A. Write a Jenkins Pipeline that performs the following tasks: 
+● Use the agent labeled builtinubuntu. 
+● Define a credentials ID named docker-hub-credentials in Jenkins that stores 
+your Docker Hub username and password/token. 
+● Fetch code from the repository: 
+https://github.com/ajay-raut/spnodeserver.git (branch: main). 
+● Build the Docker image: 
+○ Use credentials binding to securely inject Docker Hub username and 
+password. 
+○ Build the image with a tag in the format: 
+● Push the image to Docker Hub: 
+Authenticate to Docker Hub using the stored credentials. 
+Tag the image with both: 
+:latest 
+:<BUILD_NUMBER> (Jenkins build number) 
+● Push both tags to Docker Hub. 
+
+
+
+
+pipeline {
+    agent { label 'builtinubuntu' }
+
+    environment {
+        IMAGE_NAME = 'yuvi25/spnodeserver' // Replace with your Docker Hub repo
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/ajay-raut/spnodeserver.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    script {
+                        sh "echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin"
+
+                        // Build image with :latest tag
+                        sh "docker build -t ${env.IMAGE_NAME}:latest ."
+
+                        // Tag image with build number
+                        sh "docker tag ${env.IMAGE_NAME}:latest ${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+                    }
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    // Push both tags
+                    sh "docker push ${env.IMAGE_NAME}:latest"
+                    sh "docker push ${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Docker image built and pushed successfully!"
+        }
+        failure {
+            echo "❌ Build or push failed. Check logs."
+        }
+        always {
+            // Optional cleanup
+            sh 'docker logout || true'
+        }
+    }
+}
+
+-----------------------------------------------------------------

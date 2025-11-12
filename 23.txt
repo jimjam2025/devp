@@ -1,0 +1,136 @@
+1) docker run -d --name sonarqube \
+  -p 9000:9000 \
+  sonarqube:lts
+
+2) docker ps -a
+
+3) open http://localhost:9000
+
+
+4)Username: admin
+
+Password: admin
+
+
+
+5) create Jenkins project
+
+
+6)copy token and paste it into Jenkins credentials in secret text
+
+
+
+7) create quality gate
+
+
+8) manage Jenkins -> system -> sonarserver
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pipeline {
+    agent { label 'builtinnode' }
+
+    tools {
+        maven 'mvn 3.9.11'           // Updated Maven version
+        jdk 'ORACLEJDK21'        // Updated JDK to Oracle JDK 21
+    }
+
+    stages {
+        stage('Fetch code') {
+            steps {
+                git branch: 'atom', url: 'https://github.com/hkhcoder/vprofile-project.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn install -DskipTests'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'target/*.war', fingerprint: true
+                }
+            }
+        }
+
+        stage('Unit Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Checkstyle Analysis') {
+            steps {
+                sh 'mvn checkstyle:checkstyle'
+                archiveArtifacts 'target/checkstyle-result.xml'
+            }
+        }
+
+        // stage('SonarQube Analysis') {
+        //     steps {
+        //         withSonarQubeEnv('sonarserver') {
+        //             sh '''
+        //             mvn sonar:sonar \
+        //               -Dsonar.projectKey=jenkins \
+        //               -Dsonar.sources=src/ \
+        //               -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+        //               -Dsonar.junit.reportPaths=target/surefire-reports/ \
+        //               -Dsonar.jacoco.reportPaths=target/jacoco.exec \
+        //               -Dsonar.checkstyle.reportPaths=target/checkstyle-result.xml
+        //             '''
+        //         }
+        //     }
+        // }
+        stage('SonarQube Analysis') {
+    steps {
+        withSonarQubeEnv('sonarserver') {
+            sh '''
+                mvn sonar:sonar \
+                  -Dsonar.projectKey=jenkins \
+                  -Dsonar.sources=src/main/java \
+                  -Dsonar.tests=src/test/java \
+                  -Dsonar.java.binaries=target/classes,target/test-classes \
+                  -Dsonar.junit.reportPaths=target/surefire-reports \
+                  -Dsonar.jacoco.reportPaths=target/jacoco.exec \
+                  -Dsonar.checkstyle.reportPaths=target/checkstyle-result.xml
+            '''
+        }
+    }
+}
+
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Pipeline failed!'
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+    }
+}
+
+
