@@ -31,65 +31,49 @@ message: echo 'Build failed. Notifying the development team.'.
 Answer:
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 pipeline {
-    // A. Pipeline Configuration:
-    // Run on an agent with the specified label
+
     agent { label 'builtinubuntu' }
 
-    // Specify the tools from Global Tool Configuration
     tools {
-        maven 'maven 3.9.10'
+        maven 'Maven 3'
         jdk 'openjdk 21.0.7'
     }
 
     stages {
-        // B. Stage Implementation:
-        
-        // Stage 1: fetch code
+
         stage('fetch code') {
             steps {
-                // Clone the specified git repository and branch
                 git branch: 'main', url: 'https://github.com/hkhcoder/vprofile-project.git'
             }
         }
 
-        // Stage 2: unit test
         stage('unit test') {
             steps {
-                // Compile code and run unit tests
                 sh 'mvn test'
             }
         }
 
-        // Stage 3: build the code
         stage('build the code') {
             steps {
-                // Package the application, skipping tests
                 sh 'mvn package -DskipTests'
             }
         }
 
-        // Stage 4: archive the artifact
         stage('archive the artifact') {
             steps {
-                // Find and archive the .war file
                 archiveArtifacts artifacts: '**/*.war', followSymlinks: false
             }
         }
 
-        // Stage 5: deploy to staging
         stage('deploy to staging') {
             steps {
-                // This stage only runs if all previous stages succeeded
                 echo 'Deploying artifact to staging server.'
             }
         }
     }
 
     post {
-        // C. Failure Handling:
-        // This block runs after all stages are complete
         failure {
-            // This only runs if the build status is 'FAILURE'
             echo 'Build failed. Notifying the development team.'
         }
     }
@@ -1828,5 +1812,6 @@ Use the args property to launch a second "sidecar" container (postgres:14) on th
 How the main container can access the sidecar container using its name (postgres-db) as a hostname.
 
 The critical post { always { ... } } block to clean up the sidecar container, which runs on the outer agent.
+
 
 **************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************
